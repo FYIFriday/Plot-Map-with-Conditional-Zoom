@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Plotting Tool - Debug</title>
+    <!-- Use development versions for better error messages -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <div id="error-display" style="padding: 20px; background: #fee; color: #c00; display: none; white-space: pre-wrap; font-family: monospace;"></div>
+
+    <script>
+        // Global error handler
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            const errorDiv = document.getElementById('error-display');
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = 'Error: ' + msg + '\nLine: ' + lineNo + '\nColumn: ' + columnNo + '\n' + (error ? error.stack : '');
+            return false;
+        };
+
+        // Check if React loaded
+        console.log('React loaded:', typeof React !== 'undefined');
+        console.log('ReactDOM loaded:', typeof ReactDOM !== 'undefined');
+        console.log('Babel loaded:', typeof Babel !== 'undefined');
+    </script>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        function TestApp() {
+            const [count, setCount] = useState(0);
+
+            return (
+                <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+                    <h1>React Test - If you see this, React is working!</h1>
+                    <p>Count: {count}</p>
+                    <button onClick={() => setCount(count + 1)}>Increment</button>
+                    <p style={{ marginTop: '20px', color: 'green' }}>
+                        ✓ React is properly loaded and rendering
+                    </p>
+                </div>
+            );
+        }
+
+        // Render
+        try {
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<TestApp />);
+            console.log('App rendered successfully');
+        } catch (error) {
+            console.error('Render error:', error);
+            document.getElementById('error-display').style.display = 'block';
+            document.getElementById('error-display').textContent = 'Render Error: ' + error.message + '\n' + error.stack;
+        }
+    </script>
+</body>
+</html>

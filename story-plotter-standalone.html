@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Plotting Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            background: #f5f5f5;
+        }
+        #root {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+        .edit-panel {
+            width: 300px;
+            background: #f9f9f9;
+            border-right: 1px solid #ddd;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background: #fff;
+        }
+        svg {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        svg.dragging {
+            cursor: grabbing;
+        }
+        .toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        .toolbar button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .toolbar button:hover {
+            background: #f0f0f0;
+        }
+        .zoom-indicator {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 100;
+        }
+        .box {
+            cursor: move;
+        }
+        .box.selected rect {
+            stroke: #4A90E2;
+            stroke-width: 3;
+        }
+        .context-menu {
+            position: fixed;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 180px;
+            padding: 4px 0;
+            z-index: 10000;
+            font-size: 13px;
+        }
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+        .context-menu-item:hover {
+            background: #f0f0f0;
+        }
+        .tooltip {
+            position: fixed;
+            background: rgba(0,0,0,0.85);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            max-width: 250px;
+            z-index: 10001;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="edit-panel">
+            <h3>Story Plotting Tool</h3>
+            <p style="margin-top: 16px; font-size: 13px; color: #666;">
+                <strong>Instructions:</strong><br>
+                • Double-click canvas to create a box<br>
+                • Click and drag to move boxes<br>
+                • Mouse wheel to zoom<br>
+                • Right-click for options<br>
+                • SHIFT+click for multi-select
+            </p>
+            <div style="margin-top: 16px;">
+                <label style="display: block; font-size: 12px; margin-bottom: 4px;">Content:</label>
+                <textarea id="contentEditor" style="width: 100%; min-height: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" placeholder="Select a box to edit..."></textarea>
+            </div>
+            <div style="margin-top: 16px;">
+                <label style="display: block; font-size: 12px; margin-bottom: 4px;">Level:</label>
+                <input type="number" id="levelInput" min="1" value="1" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div style="margin-top: 16px;">
+                <label style="display: block; font-size: 12px; margin-bottom: 4px;">Color:</label>
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #FFB3BA; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#FFB3BA"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #FFDFBA; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#FFDFBA"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #FFFFBA; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#FFFFBA"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #BAFFC9; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#BAFFC9"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #B4F8C8; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#B4F8C8"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #A0E7E5; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#A0E7E5"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #BAE1FF; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#BAE1FF"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #E0BBE4; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#E0BBE4"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #FFC8DD; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#FFC8DD"></div>
+                    <div class="color-swatch" style="width: 100%; aspect-ratio: 1; background: #D3D3D3; border: 2px solid #ddd; border-radius: 4px; cursor: pointer;" data-color="#D3D3D3"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="canvas-container">
+            <div class="toolbar">
+                <button id="exportBtn">Export</button>
+                <button id="importBtn">Import</button>
+            </div>
+            <div class="zoom-indicator" id="zoomDisplay">Zoom: 100%</div>
+            <svg id="canvas" viewBox="0 0 2000 2000">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <polygon points="0 0, 10 3, 0 6" fill="#333" />
+                    </marker>
+                </defs>
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        // Application state
+        const state = {
+            boxes: [],
+            connections: [],
+            selectedBoxId: null,
+            zoom: 100,
+            viewBox: { x: 0, y: 0, width: 2000, height: 2000 },
+            isPanning: false,
+            panStart: { x: 0, y: 0 },
+            dragState: null
+        };
+
+        const canvas = document.getElementById('canvas');
+        const zoomDisplay = document.getElementById('zoomDisplay');
+        const contentEditor = document.getElementById('contentEditor');
+        const levelInput = document.getElementById('levelInput');
+
+        // Utility functions
+        function generateId() {
+            return '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function darkenColor(hex) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const r = Math.floor((num >> 16) * 0.7);
+            const g = Math.floor(((num >> 8) & 0x00FF) * 0.7);
+            const b = Math.floor((num & 0x0000FF) * 0.7);
+            return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+        }
+
+        function createBox(x, y) {
+            return {
+                id: generateId(),
+                x: x,
+                y: y,
+                width: 150,
+                height: 80,
+                level: 1,
+                content: 'New Box',
+                color: '#FFB3BA',
+                borderThickness: 2
+            };
+        }
+
+        function renderBox(box) {
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'box' + (state.selectedBoxId === box.id ? ' selected' : ''));
+            g.setAttribute('data-id', box.id);
+
+            const shouldCollapse = box.level > 1 && state.zoom < (60 / box.level * 2);
+            
+            if (shouldCollapse) {
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', box.x);
+                rect.setAttribute('y', box.y);
+                rect.setAttribute('width', 20);
+                rect.setAttribute('height', 20);
+                rect.setAttribute('fill', box.color);
+                rect.setAttribute('stroke', darkenColor(box.color));
+                rect.setAttribute('stroke-width', box.borderThickness);
+                g.appendChild(rect);
+            } else {
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', box.x);
+                rect.setAttribute('y', box.y);
+                rect.setAttribute('width', box.width);
+                rect.setAttribute('height', box.height);
+                rect.setAttribute('fill', box.color);
+                rect.setAttribute('stroke', darkenColor(box.color));
+                rect.setAttribute('stroke-width', box.borderThickness);
+                rect.setAttribute('rx', 4);
+                g.appendChild(rect);
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', box.x + 10);
+                text.setAttribute('y', box.y + 30);
+                text.setAttribute('font-size', 14);
+                text.setAttribute('fill', '#000');
+                text.textContent = box.content.substring(0, 50);
+                g.appendChild(text);
+            }
+
+            return g;
+        }
+
+        function render() {
+            // Clear canvas
+            while (canvas.firstChild && canvas.firstChild.tagName !== 'defs') {
+                canvas.removeChild(canvas.firstChild);
+            }
+
+            // Render boxes
+            state.boxes.forEach(box => {
+                canvas.appendChild(renderBox(box));
+            });
+
+            // Update zoom display
+            zoomDisplay.textContent = `Zoom: ${state.zoom}%`;
+
+            // Update viewBox
+            canvas.setAttribute('viewBox', `${state.viewBox.x} ${state.viewBox.y} ${state.viewBox.width} ${state.viewBox.height}`);
+        }
+
+        // Event handlers
+        canvas.addEventListener('dblclick', (e) => {
+            if (e.target === canvas) {
+                const rect = canvas.getBoundingClientRect();
+                const x = state.viewBox.x + (e.clientX - rect.left) * (state.viewBox.width / rect.width);
+                const y = state.viewBox.y + (e.clientY - rect.top) * (state.viewBox.height / rect.height);
+                
+                const box = createBox(x, y);
+                state.boxes.push(box);
+                state.selectedBoxId = box.id;
+                render();
+                updateEditor();
+            }
+        });
+
+        canvas.addEventListener('click', (e) => {
+            const boxElement = e.target.closest('.box');
+            if (boxElement) {
+                state.selectedBoxId = boxElement.getAttribute('data-id');
+                render();
+                updateEditor();
+            }
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -10 : 10;
+            state.zoom = Math.max(10, Math.min(400, state.zoom + delta));
+            const zoomFactor = 100 / state.zoom;
+            state.viewBox.width = 2000 * zoomFactor;
+            state.viewBox.height = 2000 * zoomFactor;
+            render();
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0 && e.target === canvas) {
+                state.isPanning = true;
+                state.panStart = { x: e.clientX, y: e.clientY };
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (state.isPanning) {
+                const rect = canvas.getBoundingClientRect();
+                const dx = (state.panStart.x - e.clientX) * (state.viewBox.width / rect.width);
+                const dy = (state.panStart.y - e.clientY) * (state.viewBox.height / rect.height);
+                state.viewBox.x += dx;
+                state.viewBox.y += dy;
+                state.panStart = { x: e.clientX, y: e.clientY };
+                render();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            state.isPanning = false;
+            canvas.style.cursor = 'grab';
+        });
+
+        // Editor updates
+        function updateEditor() {
+            const selectedBox = state.boxes.find(b => b.id === state.selectedBoxId);
+            if (selectedBox) {
+                contentEditor.value = selectedBox.content;
+                levelInput.value = selectedBox.level;
+            } else {
+                contentEditor.value = '';
+                levelInput.value = 1;
+            }
+        }
+
+        contentEditor.addEventListener('input', (e) => {
+            const selectedBox = state.boxes.find(b => b.id === state.selectedBoxId);
+            if (selectedBox) {
+                selectedBox.content = e.target.value;
+                render();
+            }
+        });
+
+        levelInput.addEventListener('change', (e) => {
+            const selectedBox = state.boxes.find(b => b.id === state.selectedBoxId);
+            if (selectedBox) {
+                selectedBox.level = parseInt(e.target.value) || 1;
+                render();
+            }
+        });
+
+        // Color swatches
+        document.querySelectorAll('.color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                const selectedBox = state.boxes.find(b => b.id === state.selectedBoxId);
+                if (selectedBox) {
+                    selectedBox.color = swatch.getAttribute('data-color');
+                    render();
+                }
+            });
+        });
+
+        // Export/Import
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const data = JSON.stringify({ boxes: state.boxes, connections: state.connections }, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `story-plot-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('importBtn').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            state.boxes = data.boxes || [];
+                            state.connections = data.connections || [];
+                            render();
+                        } catch (err) {
+                            alert('Invalid JSON file');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        });
+
+        // Initial render
+        render();
+
+        console.log('Story plotter loaded successfully!');
+    </script>
+</body>
+</html>
