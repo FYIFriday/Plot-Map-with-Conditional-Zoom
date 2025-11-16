@@ -1,0 +1,1701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Plotting Tool</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            overflow: hidden;
+            background: #f5f5f5;
+        }
+
+        #root {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .canvas-container svg {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+
+        .canvas-container svg.dragging {
+            cursor: grabbing;
+        }
+
+        .edit-panel {
+            width: 300px;
+            background: #f9f9f9;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        .edit-panel.collapsed {
+            width: 0;
+            overflow: hidden;
+        }
+
+        .edit-panel-header {
+            padding: 16px;
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .edit-panel-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .edit-panel-content {
+            padding: 16px;
+            flex: 1;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: #555;
+        }
+
+        .form-group input[type="number"],
+        .form-group input[type="range"] {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .form-group input[type="range"] {
+            padding: 0;
+        }
+
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        .color-swatch {
+            width: 100%;
+            aspect-ratio: 1;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.1);
+        }
+
+        .color-swatch.selected {
+            border-color: #333;
+            box-shadow: 0 0 0 2px #fff, 0 0 0 4px #333;
+        }
+
+        .content-editor {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px;
+            min-height: 120px;
+            background: #fff;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .content-editor:focus {
+            outline: none;
+            border-color: #4A90E2;
+        }
+
+        .editor-toolbar {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+            padding: 4px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        .editor-toolbar button {
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .editor-toolbar button:hover {
+            background: #f0f0f0;
+        }
+
+        .editor-toolbar button.active {
+            background: #4A90E2;
+            color: #fff;
+            border-color: #4A90E2;
+        }
+
+        .tag-manager {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .tag-button {
+            padding: 4px 10px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .tag-button:hover {
+            background: #f0f0f0;
+        }
+
+        .tag-button.active {
+            background: #4A90E2;
+            color: #fff;
+            border-color: #4A90E2;
+        }
+
+        .context-menu {
+            position: fixed;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 180px;
+            padding: 4px 0;
+            z-index: 10000;
+            font-size: 13px;
+        }
+
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .context-menu-item:hover {
+            background: #f0f0f0;
+        }
+
+        .context-menu-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .context-menu-separator {
+            height: 1px;
+            background: #ddd;
+            margin: 4px 0;
+        }
+
+        .submenu {
+            position: absolute;
+            left: 100%;
+            top: 0;
+            margin-left: -4px;
+        }
+
+        .toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .toolbar button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .toolbar button:hover {
+            background: #f0f0f0;
+        }
+
+        .zoom-indicator {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: 8px;
+            width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .modal-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-content {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .modal-footer button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .modal-footer button.primary {
+            background: #4A90E2;
+            color: #fff;
+            border-color: #4A90E2;
+        }
+
+        .box-element {
+            cursor: move;
+        }
+
+        .box-element.selected rect {
+            stroke: #4A90E2;
+            stroke-width: 3;
+        }
+
+        .connection-path {
+            cursor: pointer;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        .connection-path.selected {
+            stroke-width: 4;
+            filter: drop-shadow(0 0 4px rgba(74, 144, 226, 0.8));
+        }
+
+        .collapsed-box {
+            cursor: pointer;
+        }
+
+        .tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            max-width: 250px;
+            z-index: 10001;
+            pointer-events: none;
+            word-wrap: break-word;
+        }
+
+        .no-selection {
+            color: #999;
+            font-size: 13px;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .range-value {
+            display: inline-block;
+            margin-left: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        button {
+            font-family: inherit;
+        }
+
+        .add-tag-input {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .add-tag-input input {
+            flex: 1;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .add-tag-input button {
+            padding: 4px 12px;
+            border: 1px solid #ddd;
+            background: #4A90E2;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // Utility functions
+        const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
+
+        const darkenColor = (hex, percent = 30) => {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const r = (num >> 16);
+            const g = (num >> 8 & 0x00FF);
+            const b = (num & 0x0000FF);
+
+            const darken = (c) => Math.max(0, Math.floor(c * (1 - percent / 100)));
+
+            return '#' + ((darken(r) << 16) | (darken(g) << 8) | darken(b)).toString(16).padStart(6, '0');
+        };
+
+        const getContrastColor = (hex) => {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const r = (num >> 16) / 255;
+            const g = (num >> 8 & 0x00FF) / 255;
+            const b = (num & 0x0000FF) / 255;
+
+            const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            return luminance > 0.5 ? '#000000' : '#FFFFFF';
+        };
+
+        const DEFAULT_COLORS = [
+            '#FFB3BA', // red
+            '#FFDFBA', // orange
+            '#FFFFBA', // yellow
+            '#BAFFC9', // yellow-green
+            '#B4F8C8', // green
+            '#A0E7E5', // teal
+            '#BAE1FF', // blue
+            '#E0BBE4', // purple
+            '#FFC8DD', // pink
+            '#D3D3D3'  // light grey
+        ];
+
+        const INITIAL_SETTINGS = {
+            defaultColors: [...DEFAULT_COLORS],
+            levelThresholds: {
+                2: 60,
+                3: 40,
+                4: 25,
+                5: 15
+            },
+            defaultBorderThickness: 2
+        };
+
+        // Main App Component
+        function App() {
+            const [boxes, setBoxes] = useState([]);
+            const [connections, setConnections] = useState([]);
+            const [settings, setSettings] = useState(INITIAL_SETTINGS);
+            const [selectedBoxIds, setSelectedBoxIds] = useState([]);
+            const [selectedConnectionIds, setSelectedConnectionIds] = useState([]);
+            const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 2000, height: 2000 });
+            const [zoom, setZoom] = useState(100);
+            const [isPanning, setIsPanning] = useState(false);
+            const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+            const [contextMenu, setContextMenu] = useState(null);
+            const [editPanelOpen, setEditPanelOpen] = useState(true);
+            const [showSettings, setShowSettings] = useState(false);
+            const [history, setHistory] = useState([]);
+            const [historyIndex, setHistoryIndex] = useState(-1);
+            const [tooltip, setTooltip] = useState(null);
+            const [dragState, setDragState] = useState(null);
+
+            const canvasRef = useRef(null);
+            const tooltipTimeout = useRef(null);
+            const [clipboard, setClipboard] = useState(null);
+            const arrowKeySaveTimeout = useRef(null);
+
+            // Tooltip handlers
+            const showTooltip = useCallback((x, y, text) => {
+                setTooltip({ x, y, text });
+            }, []);
+
+            const hideTooltip = useCallback(() => {
+                setTooltip(null);
+            }, []);
+
+            // Load from localStorage on mount
+            useEffect(() => {
+                try {
+                    const saved = localStorage.getItem('storyPlotProject');
+                    if (saved) {
+                        const data = JSON.parse(saved);
+                        setBoxes(data.boxes || []);
+                        setConnections(data.connections || []);
+                        setSettings(data.settings || INITIAL_SETTINGS);
+                    }
+                } catch (e) {
+                    console.error('Failed to load from localStorage:', e);
+                }
+            }, []);
+
+            // Auto-save every 30 seconds
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    try {
+                        const data = { boxes, connections, settings };
+                        localStorage.setItem('storyPlotProject', JSON.stringify(data));
+                        console.log('Auto-saved to localStorage');
+                    } catch (e) {
+                        console.error('Failed to auto-save:', e);
+                    }
+                }, 30000);
+
+                return () => clearInterval(interval);
+            }, [boxes, connections, settings]);
+
+            // Save to history
+            const saveToHistory = useCallback(() => {
+                const state = { boxes, connections, settings };
+                const newHistory = history.slice(0, historyIndex + 1);
+                newHistory.push(JSON.parse(JSON.stringify(state)));
+                if (newHistory.length > 50) newHistory.shift();
+                setHistory(newHistory);
+                setHistoryIndex(newHistory.length - 1);
+            }, [boxes, connections, settings, history, historyIndex]);
+
+            // Undo
+            const undo = useCallback(() => {
+                if (historyIndex > 0) {
+                    const newIndex = historyIndex - 1;
+                    const state = history[newIndex];
+                    setBoxes(state.boxes);
+                    setConnections(state.connections);
+                    setSettings(state.settings);
+                    setHistoryIndex(newIndex);
+                }
+            }, [history, historyIndex]);
+
+            // Redo
+            const redo = useCallback(() => {
+                if (historyIndex < history.length - 1) {
+                    const newIndex = historyIndex + 1;
+                    const state = history[newIndex];
+                    setBoxes(state.boxes);
+                    setConnections(state.connections);
+                    setSettings(state.settings);
+                    setHistoryIndex(newIndex);
+                }
+            }, [history, historyIndex]);
+
+            // Handle zoom
+            const handleWheel = useCallback((e) => {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -10 : 10;
+                const newZoom = Math.max(10, Math.min(400, zoom + delta));
+
+                // Adjust viewBox for zoom effect
+                const zoomFactor = 100 / newZoom;
+                const baseWidth = 2000;
+                const baseHeight = 2000;
+
+                setViewBox(prev => ({
+                    ...prev,
+                    width: baseWidth * zoomFactor,
+                    height: baseHeight * zoomFactor
+                }));
+
+                setZoom(newZoom);
+            }, [zoom]);
+
+            // Handle pan start
+            const handlePanStart = useCallback((e) => {
+                if (e.button === 0 && e.target === e.currentTarget) {
+                    setIsPanning(true);
+                    setPanStart({ x: e.clientX, y: e.clientY });
+                }
+            }, []);
+
+            // Handle pan move
+            const handlePanMove = useCallback((e) => {
+                if (isPanning) {
+                    const dx = (panStart.x - e.clientX) * (viewBox.width / canvasRef.current.clientWidth);
+                    const dy = (panStart.y - e.clientY) * (viewBox.height / canvasRef.current.clientHeight);
+                    setViewBox(prev => ({
+                        ...prev,
+                        x: prev.x + dx,
+                        y: prev.y + dy
+                    }));
+                    setPanStart({ x: e.clientX, y: e.clientY });
+                }
+            }, [isPanning, panStart, viewBox]);
+
+            // Handle pan end
+            const handlePanEnd = useCallback(() => {
+                setIsPanning(false);
+            }, []);
+
+            // Convert screen coordinates to SVG coordinates
+            const screenToSVG = useCallback((screenX, screenY) => {
+                if (!canvasRef.current) return { x: 0, y: 0 };
+                const rect = canvasRef.current.getBoundingClientRect();
+                const x = viewBox.x + (screenX - rect.left) * (viewBox.width / rect.width);
+                const y = viewBox.y + (screenY - rect.top) * (viewBox.height / rect.height);
+                return { x, y };
+            }, [viewBox]);
+
+            // Handle double click on canvas
+            const handleCanvasDoubleClick = useCallback((e) => {
+                if (e.target === e.currentTarget) {
+                    const { x, y } = screenToSVG(e.clientX, e.clientY);
+                    const newBox = {
+                        id: generateId(),
+                        x: x,
+                        y: y,
+                        width: 150,
+                        height: 80,
+                        level: 1,
+                        content: '',
+                        color: settings.defaultColors[0],
+                        borderThickness: settings.defaultBorderThickness,
+                        tags: [],
+                        zIndex: boxes.length
+                    };
+                    setBoxes(prev => [...prev, newBox]);
+                    setSelectedBoxIds([newBox.id]);
+                    setSelectedConnectionIds([]);
+                    setEditPanelOpen(true);
+                    saveToHistory();
+                }
+            }, [screenToSVG, settings, boxes.length, saveToHistory]);
+
+            // Handle right click
+            const handleContextMenu = useCallback((e) => {
+                e.preventDefault();
+                setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    type: selectedBoxIds.length > 0 ? 'box' : selectedConnectionIds.length > 0 ? 'connection' : 'canvas'
+                });
+            }, [selectedBoxIds, selectedConnectionIds]);
+
+            // Close context menu
+            useEffect(() => {
+                const handleClick = () => setContextMenu(null);
+                const handleEscape = (e) => {
+                    if (e.key === 'Escape') {
+                        setContextMenu(null);
+                        setSelectedBoxIds([]);
+                        setSelectedConnectionIds([]);
+                    }
+                };
+                document.addEventListener('click', handleClick);
+                document.addEventListener('keydown', handleEscape);
+                return () => {
+                    document.removeEventListener('click', handleClick);
+                    document.removeEventListener('keydown', handleEscape);
+                };
+            }, []);
+
+            // Keyboard shortcuts
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    // Ignore if typing in input or contenteditable
+                    const isTyping = e.target.matches('input, textarea, [contenteditable]');
+
+                    // Delete
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && !isTyping) {
+                        e.preventDefault();
+                        if (selectedBoxIds.length > 0) {
+                            setBoxes(prev => prev.filter(b => !selectedBoxIds.includes(b.id)));
+                            setConnections(prev => prev.filter(c =>
+                                !selectedBoxIds.includes(c.sourceId) && !selectedBoxIds.includes(c.targetId)
+                            ));
+                            setSelectedBoxIds([]);
+                            saveToHistory();
+                        }
+                        if (selectedConnectionIds.length > 0) {
+                            setConnections(prev => prev.filter(c => !selectedConnectionIds.includes(c.id)));
+                            setSelectedConnectionIds([]);
+                            saveToHistory();
+                        }
+                    }
+
+                    // Undo
+                    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        undo();
+                    }
+
+                    // Redo
+                    if ((e.ctrlKey && e.shiftKey && e.key === 'z') || (e.ctrlKey && e.key === 'y')) {
+                        e.preventDefault();
+                        redo();
+                    }
+
+                    // Copy
+                    if (e.ctrlKey && e.key === 'c' && !isTyping && selectedBoxIds.length > 0) {
+                        e.preventDefault();
+                        const copiedBoxes = boxes.filter(b => selectedBoxIds.includes(b.id));
+                        setClipboard(copiedBoxes);
+                    }
+
+                    // Paste
+                    if (e.ctrlKey && e.key === 'v' && !isTyping && clipboard) {
+                        e.preventDefault();
+                        const newBoxes = clipboard.map(box => ({
+                            ...box,
+                            id: generateId(),
+                            x: box.x + 50,
+                            y: box.y + 50
+                        }));
+                        setBoxes(prev => [...prev, ...newBoxes]);
+                        setSelectedBoxIds(newBoxes.map(b => b.id));
+                        saveToHistory();
+                    }
+
+                    // Duplicate
+                    if (e.ctrlKey && e.key === 'd' && !isTyping && selectedBoxIds.length > 0) {
+                        e.preventDefault();
+                        const selectedBoxes = boxes.filter(b => selectedBoxIds.includes(b.id));
+                        const newBoxes = selectedBoxes.map(box => ({
+                            ...box,
+                            id: generateId(),
+                            x: box.x + 50,
+                            y: box.y + 50
+                        }));
+                        setBoxes(prev => [...prev, ...newBoxes]);
+                        setSelectedBoxIds(newBoxes.map(b => b.id));
+                        saveToHistory();
+                    }
+
+                    // Select All
+                    if (e.ctrlKey && e.key === 'a' && !isTyping) {
+                        e.preventDefault();
+                        setSelectedBoxIds(boxes.map(b => b.id));
+                        setSelectedConnectionIds([]);
+                    }
+
+                    // Arrow key nudging
+                    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !isTyping && selectedBoxIds.length > 0) {
+                        e.preventDefault();
+                        const distance = e.shiftKey ? 10 : 1;
+                        const dx = e.key === 'ArrowLeft' ? -distance : e.key === 'ArrowRight' ? distance : 0;
+                        const dy = e.key === 'ArrowUp' ? -distance : e.key === 'ArrowDown' ? distance : 0;
+                        setBoxes(prev => prev.map(b =>
+                            selectedBoxIds.includes(b.id) ? { ...b, x: b.x + dx, y: b.y + dy } : b
+                        ));
+
+                        // Debounced save to history
+                        if (arrowKeySaveTimeout.current) {
+                            clearTimeout(arrowKeySaveTimeout.current);
+                        }
+                        arrowKeySaveTimeout.current = setTimeout(() => {
+                            saveToHistory();
+                        }, 500);
+                    }
+                };
+
+                document.addEventListener('keydown', handleKeyDown);
+                return () => document.removeEventListener('keydown', handleKeyDown);
+            }, [selectedBoxIds, selectedConnectionIds, boxes, clipboard, undo, redo, saveToHistory]);
+
+            // Export project
+            const exportProject = useCallback(() => {
+                const data = { boxes, connections, settings };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `project-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }, [boxes, connections, settings]);
+
+            // Import project
+            const importProject = useCallback(() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            try {
+                                const data = JSON.parse(e.target.result);
+                                if (confirm('This will replace your current project. Continue?')) {
+                                    setBoxes(data.boxes || []);
+                                    setConnections(data.connections || []);
+                                    setSettings(data.settings || INITIAL_SETTINGS);
+                                    saveToHistory();
+                                }
+                            } catch (error) {
+                                alert('Invalid JSON file');
+                            }
+                        };
+                        reader.readAsText(file);
+                    }
+                };
+                input.click();
+            }, [saveToHistory]);
+
+            // Layer management
+            const handleLayerAction = useCallback((action) => {
+                setBoxes(prev => {
+                    const maxZ = Math.max(...prev.map(b => b.zIndex || 0), 0);
+                    return prev.map(b => {
+                        if (!selectedBoxIds.includes(b.id)) return b;
+
+                        switch (action) {
+                            case 'front':
+                                return { ...b, zIndex: maxZ + 1 };
+                            case 'back':
+                                return { ...b, zIndex: 0 };
+                            case 'forward':
+                                return { ...b, zIndex: Math.min((b.zIndex || 0) + 1, maxZ) };
+                            case 'backward':
+                                return { ...b, zIndex: Math.max((b.zIndex || 0) - 1, 0) };
+                            default:
+                                return b;
+                        }
+                    });
+                });
+                saveToHistory();
+            }, [selectedBoxIds, saveToHistory]);
+
+            // Quick edit for boxes and connections
+            const handleQuickEdit = useCallback((property, value) => {
+                if (selectedBoxIds.length > 0) {
+                    setBoxes(prev => prev.map(b =>
+                        selectedBoxIds.includes(b.id) ? { ...b, [property]: value } : b
+                    ));
+                }
+                if (selectedConnectionIds.length > 0) {
+                    setConnections(prev => prev.map(c =>
+                        selectedConnectionIds.includes(c.id) ? { ...c, [property]: value } : c
+                    ));
+                }
+                saveToHistory();
+            }, [selectedBoxIds, selectedConnectionIds, saveToHistory]);
+
+            return (
+                <div id="root">
+                    <EditPanel
+                        open={editPanelOpen}
+                        boxes={boxes}
+                        selectedBoxIds={selectedBoxIds}
+                        settings={settings}
+                        onUpdateBox={(id, updates) => {
+                            setBoxes(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+                        }}
+                        onUpdateSelectedBoxes={(updates) => {
+                            setBoxes(prev => prev.map(b =>
+                                selectedBoxIds.includes(b.id) ? { ...b, ...updates } : b
+                            ));
+                        }}
+                        onToggle={() => setEditPanelOpen(!editPanelOpen)}
+                    />
+
+                    <div className="canvas-container">
+                        <div className="toolbar">
+                            <button onClick={importProject}>Import</button>
+                            <button onClick={exportProject}>Export</button>
+                            <button onClick={() => setShowSettings(true)}>Settings</button>
+                        </div>
+
+                        <div className="zoom-indicator">
+                            Zoom: {zoom}%
+                        </div>
+
+                        <svg
+                            ref={canvasRef}
+                            viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
+                            onWheel={handleWheel}
+                            onMouseDown={handlePanStart}
+                            onMouseMove={handlePanMove}
+                            onMouseUp={handlePanEnd}
+                            onDoubleClick={handleCanvasDoubleClick}
+                            onContextMenu={handleContextMenu}
+                            className={isPanning ? 'dragging' : ''}
+                        >
+                            {/* Render connections */}
+                            {connections.map(conn => (
+                                <Connection
+                                    key={conn.id}
+                                    connection={conn}
+                                    boxes={boxes}
+                                    selected={selectedConnectionIds.includes(conn.id)}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (e.shiftKey) {
+                                            setSelectedConnectionIds(prev =>
+                                                prev.includes(conn.id)
+                                                    ? prev.filter(id => id !== conn.id)
+                                                    : [...prev, conn.id]
+                                            );
+                                        } else {
+                                            setSelectedConnectionIds([conn.id]);
+                                            setSelectedBoxIds([]);
+                                        }
+                                    }}
+                                />
+                            ))}
+
+                            {/* Render boxes */}
+                            {[...boxes].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map(box => (
+                                <Box
+                                    key={box.id}
+                                    box={box}
+                                    zoom={zoom}
+                                    settings={settings}
+                                    selected={selectedBoxIds.includes(box.id)}
+                                    onShowTooltip={showTooltip}
+                                    onHideTooltip={hideTooltip}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (e.shiftKey) {
+                                            setSelectedBoxIds(prev =>
+                                                prev.includes(box.id)
+                                                    ? prev.filter(id => id !== box.id)
+                                                    : [...prev, box.id]
+                                            );
+                                        } else {
+                                            setSelectedBoxIds([box.id]);
+                                            setSelectedConnectionIds([]);
+                                        }
+                                    }}
+                                    onDoubleClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedBoxIds([box.id]);
+                                        setSelectedConnectionIds([]);
+                                        setEditPanelOpen(true);
+                                    }}
+                                    onDragStart={(e) => {
+                                        if (!selectedBoxIds.includes(box.id)) {
+                                            setSelectedBoxIds([box.id]);
+                                        }
+                                        setDragState({
+                                            startX: e.clientX,
+                                            startY: e.clientY,
+                                            boxes: boxes.filter(b => selectedBoxIds.includes(b.id) || b.id === box.id)
+                                                .map(b => ({ id: b.id, x: b.x, y: b.y }))
+                                        });
+                                    }}
+                                    onDrag={(e) => {
+                                        if (dragState) {
+                                            const dx = (e.clientX - dragState.startX) * (viewBox.width / canvasRef.current.clientWidth);
+                                            const dy = (e.clientY - dragState.startY) * (viewBox.height / canvasRef.current.clientHeight);
+                                            setBoxes(prev => prev.map(b => {
+                                                const originalBox = dragState.boxes.find(db => db.id === b.id);
+                                                if (originalBox) {
+                                                    return { ...b, x: originalBox.x + dx, y: originalBox.y + dy };
+                                                }
+                                                return b;
+                                            }));
+                                        }
+                                    }}
+                                    onDragEnd={() => {
+                                        setDragState(null);
+                                        saveToHistory();
+                                    }}
+                                />
+                            ))}
+                        </svg>
+
+                        {/* Context Menu */}
+                        {contextMenu && (
+                            <ContextMenu
+                                x={contextMenu.x}
+                                y={contextMenu.y}
+                                type={contextMenu.type}
+                                settings={settings}
+                                onClose={() => setContextMenu(null)}
+                                onDeleteBoxes={() => {
+                                    setBoxes(prev => prev.filter(b => !selectedBoxIds.includes(b.id)));
+                                    setConnections(prev => prev.filter(c =>
+                                        !selectedBoxIds.includes(c.sourceId) && !selectedBoxIds.includes(c.targetId)
+                                    ));
+                                    setSelectedBoxIds([]);
+                                    saveToHistory();
+                                }}
+                                onDeleteConnections={() => {
+                                    setConnections(prev => prev.filter(c => !selectedConnectionIds.includes(c.id)));
+                                    setSelectedConnectionIds([]);
+                                    saveToHistory();
+                                }}
+                                onAddConnection={(style) => {
+                                    const newConnections = [];
+                                    selectedBoxIds.forEach(sourceId => {
+                                        selectedBoxIds.forEach(targetId => {
+                                            if (sourceId !== targetId) {
+                                                newConnections.push({
+                                                    id: generateId(),
+                                                    sourceId,
+                                                    targetId,
+                                                    style,
+                                                    color: settings.defaultColors[0],
+                                                    zIndex: connections.length + newConnections.length
+                                                });
+                                            }
+                                        });
+                                    });
+                                    setConnections(prev => [...prev, ...newConnections]);
+                                    saveToHistory();
+                                }}
+                                onLayerAction={handleLayerAction}
+                                onQuickEdit={handleQuickEdit}
+                            />
+                        )}
+
+                        {/* Tooltip */}
+                        {tooltip && (
+                            <div className="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+                                {tooltip.text}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Settings Modal */}
+                    {showSettings && (
+                        <SettingsModal
+                            settings={settings}
+                            onSave={(newSettings) => {
+                                setSettings(newSettings);
+                                setShowSettings(false);
+                                saveToHistory();
+                            }}
+                            onClose={() => setShowSettings(false)}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // Box Component
+        function Box({ box, zoom, settings, selected, onClick, onDoubleClick, onDragStart, onDrag, onDragEnd, onShowTooltip, onHideTooltip }) {
+            const [isDragging, setIsDragging] = useState(false);
+            const hoverTimeoutRef = useRef(null);
+
+            const shouldCollapse = box.level > 1 && zoom < (settings.levelThresholds[box.level] || 100);
+            const fontSize = box.level === 1 ? 14 : 14 - (box.level - 1) * 1;
+            const scaledFontSize = fontSize * (zoom / 100);
+
+            const handleMouseDown = (e) => {
+                if (e.button === 0 && !shouldCollapse) {
+                    setIsDragging(true);
+                    onDragStart(e);
+                }
+            };
+
+            const handleMouseEnter = (e) => {
+                if (shouldCollapse) {
+                    hoverTimeoutRef.current = setTimeout(() => {
+                        const text = box.content.replace(/<[^>]*>/g, '').substring(0, 100);
+                        onShowTooltip(e.clientX + 10, e.clientY + 10, text || 'Empty box');
+                    }, 500);
+                }
+            };
+
+            const handleMouseLeave = () => {
+                if (hoverTimeoutRef.current) {
+                    clearTimeout(hoverTimeoutRef.current);
+                    hoverTimeoutRef.current = null;
+                }
+                onHideTooltip();
+            };
+
+            useEffect(() => {
+                if (!isDragging) return;
+
+                const handleMouseMove = (e) => {
+                    onDrag(e);
+                };
+
+                const handleMouseUp = () => {
+                    setIsDragging(false);
+                    onDragEnd();
+                };
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+
+                return () => {
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                };
+            }, [isDragging, onDrag, onDragEnd]);
+
+            useEffect(() => {
+                return () => {
+                    if (hoverTimeoutRef.current) {
+                        clearTimeout(hoverTimeoutRef.current);
+                    }
+                };
+            }, []);
+
+            if (shouldCollapse) {
+                const size = 20;
+                return (
+                    <g
+                        className="collapsed-box"
+                        onClick={onClick}
+                        onDoubleClick={onDoubleClick}
+                        onMouseEnter={handleMouseEnter}
+                        onMouseLeave={handleMouseLeave}
+                    >
+                        <rect
+                            x={box.x}
+                            y={box.y}
+                            width={size}
+                            height={size}
+                            fill={box.color}
+                            stroke={selected ? '#4A90E2' : darkenColor(box.color, 30)}
+                            strokeWidth={selected ? 3 : box.borderThickness}
+                        />
+                    </g>
+                );
+            }
+
+            return (
+                <g
+                    className={`box-element ${selected ? 'selected' : ''}`}
+                    onClick={onClick}
+                    onDoubleClick={onDoubleClick}
+                    onMouseDown={handleMouseDown}
+                >
+                    <rect
+                        x={box.x}
+                        y={box.y}
+                        width={box.width}
+                        height={box.height}
+                        fill={box.color}
+                        stroke={selected ? '#4A90E2' : darkenColor(box.color, 30)}
+                        strokeWidth={selected ? 3 : box.borderThickness}
+                        rx={4}
+                    />
+                    <foreignObject
+                        x={box.x + 8}
+                        y={box.y + 8}
+                        width={box.width - 16}
+                        height={box.height - 16}
+                    >
+                        <div
+                            style={{
+                                fontSize: `${scaledFontSize}px`,
+                                color: getContrastColor(box.color),
+                                overflow: 'hidden',
+                                wordWrap: 'break-word'
+                            }}
+                            dangerouslySetInnerHTML={{ __html: box.content || 'Double-click to edit' }}
+                        />
+                    </foreignObject>
+                </g>
+            );
+        }
+
+        // Connection Component
+        function Connection({ connection, boxes, selected, onClick }) {
+            const sourceBox = boxes.find(b => b.id === connection.sourceId);
+            const targetBox = boxes.find(b => b.id === connection.targetId);
+
+            if (!sourceBox || !targetBox) return null;
+
+            const x1 = sourceBox.x + sourceBox.width / 2;
+            const y1 = sourceBox.y + sourceBox.height / 2;
+            const x2 = targetBox.x + targetBox.width / 2;
+            const y2 = targetBox.y + targetBox.height / 2;
+
+            let strokeDasharray = 'none';
+            if (connection.style === 'dashed') strokeDasharray = '10,5';
+            if (connection.style === 'dotted') strokeDasharray = '2,3';
+
+            // Calculate perpendicular offset for double lines
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const perpX = (-dy / length) * 3;
+            const perpY = (dx / length) * 3;
+
+            const markerId = `arrowhead-${connection.id}`;
+
+            if (connection.style === 'double') {
+                return (
+                    <g onClick={onClick}>
+                        <path
+                            className={`connection-path ${selected ? 'selected' : ''}`}
+                            d={`M ${x1 + perpX} ${y1 + perpY} L ${x2 + perpX} ${y2 + perpY}`}
+                            stroke={connection.color}
+                            markerEnd={`url(#${markerId})`}
+                        />
+                        <path
+                            className={`connection-path ${selected ? 'selected' : ''}`}
+                            d={`M ${x1 - perpX} ${y1 - perpY} L ${x2 - perpX} ${y2 - perpY}`}
+                            stroke={connection.color}
+                            markerEnd={`url(#${markerId})`}
+                        />
+                        <defs>
+                            <marker
+                                id={markerId}
+                                markerWidth="10"
+                                markerHeight="10"
+                                refX="9"
+                                refY="3"
+                                orient="auto"
+                            >
+                                <polygon points="0 0, 10 3, 0 6" fill={connection.color} />
+                            </marker>
+                        </defs>
+                    </g>
+                );
+            }
+
+            return (
+                <g onClick={onClick}>
+                    <path
+                        className={`connection-path ${selected ? 'selected' : ''}`}
+                        d={`M ${x1} ${y1} L ${x2} ${y2}`}
+                        stroke={connection.color}
+                        strokeDasharray={strokeDasharray}
+                        markerEnd={`url(#${markerId})`}
+                    />
+                    <defs>
+                        <marker
+                            id={markerId}
+                            markerWidth="10"
+                            markerHeight="10"
+                            refX="9"
+                            refY="3"
+                            orient="auto"
+                        >
+                            <polygon points="0 0, 10 3, 0 6" fill={connection.color} />
+                        </marker>
+                    </defs>
+                </g>
+            );
+        }
+
+        // EditPanel Component
+        function EditPanel({ open, boxes, selectedBoxIds, settings, onUpdateBox, onUpdateSelectedBoxes, onToggle }) {
+            const selectedBoxes = boxes.filter(b => selectedBoxIds.includes(b.id));
+            const singleBox = selectedBoxes.length === 1 ? selectedBoxes[0] : null;
+            const [newTag, setNewTag] = useState('');
+
+            // Get all unique tags from all boxes
+            const allTags = [...new Set(boxes.flatMap(b => b.tags || []))];
+
+            // Get tags on selected boxes
+            const selectedTags = selectedBoxes.flatMap(b => b.tags || []);
+            const commonTags = allTags.filter(tag =>
+                selectedBoxes.every(box => (box.tags || []).includes(tag))
+            );
+
+            const handleAddTag = () => {
+                if (newTag.trim() && selectedBoxes.length > 0) {
+                    onUpdateSelectedBoxes({
+                        tags: [...new Set([...(singleBox?.tags || []), newTag.trim()])]
+                    });
+                    setNewTag('');
+                }
+            };
+
+            const handleToggleTag = (tag) => {
+                if (selectedBoxes.length === 0) return;
+                const hasTag = commonTags.includes(tag);
+                if (hasTag) {
+                    // Remove tag from all selected boxes
+                    selectedBoxes.forEach(box => {
+                        onUpdateBox(box.id, {
+                            tags: (box.tags || []).filter(t => t !== tag)
+                        });
+                    });
+                } else {
+                    // Add tag to all selected boxes
+                    selectedBoxes.forEach(box => {
+                        onUpdateBox(box.id, {
+                            tags: [...new Set([...(box.tags || []), tag])]
+                        });
+                    });
+                }
+            };
+
+            if (!open) {
+                return (
+                    <div className="edit-panel collapsed">
+                        <button onClick={onToggle} style={{ margin: '8px' }}>Open Panel</button>
+                    </div>
+                );
+            }
+
+            if (selectedBoxes.length === 0) {
+                return (
+                    <div className="edit-panel">
+                        <div className="edit-panel-header">
+                            <h3>Edit Panel</h3>
+                            <button onClick={onToggle}>Close</button>
+                        </div>
+                        <div className="edit-panel-content">
+                            <div className="no-selection">
+                                No selection
+                                <br /><br />
+                                Double-click a box or canvas to edit
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="edit-panel">
+                    <div className="edit-panel-header">
+                        <h3>{selectedBoxes.length === 1 ? 'Edit Box' : `Edit ${selectedBoxes.length} Boxes`}</h3>
+                        <button onClick={onToggle}>Close</button>
+                    </div>
+                    <div className="edit-panel-content">
+                        {/* Content Editor */}
+                        <div className="form-group">
+                            <label>Content</label>
+                            {selectedBoxes.length === 1 ? (
+                                <>
+                                    <div className="editor-toolbar">
+                                        <button onClick={() => document.execCommand('bold')}>B</button>
+                                        <button onClick={() => document.execCommand('italic')}>I</button>
+                                        <button onClick={() => document.execCommand('underline')}>U</button>
+                                        <button onClick={() => document.execCommand('strikeThrough')}>S</button>
+                                        <button onClick={() => document.execCommand('insertUnorderedList')}>•</button>
+                                    </div>
+                                    <div
+                                        className="content-editor"
+                                        contentEditable
+                                        dangerouslySetInnerHTML={{ __html: singleBox.content }}
+                                        onBlur={(e) => {
+                                            onUpdateBox(singleBox.id, { content: e.target.innerHTML });
+                                        }}
+                                    />
+                                </>
+                            ) : (
+                                <div style={{ color: '#999', fontSize: '13px' }}>
+                                    [Multiple boxes selected - editing disabled]
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Level */}
+                        <div className="form-group">
+                            <label>Plot Level</label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={singleBox ? singleBox.level : ''}
+                                placeholder={selectedBoxes.length > 1 ? 'Mixed' : ''}
+                                onChange={(e) => {
+                                    const level = parseInt(e.target.value) || 1;
+                                    onUpdateSelectedBoxes({ level });
+                                }}
+                            />
+                        </div>
+
+                        {/* Color */}
+                        <div className="form-group">
+                            <label>Color</label>
+                            <div className="color-grid">
+                                {settings.defaultColors.map(color => (
+                                    <div
+                                        key={color}
+                                        className={`color-swatch ${singleBox && singleBox.color === color ? 'selected' : ''}`}
+                                        style={{ backgroundColor: color }}
+                                        onClick={() => onUpdateSelectedBoxes({ color })}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Border Thickness */}
+                        <div className="form-group">
+                            <label>
+                                Border Thickness
+                                <span className="range-value">
+                                    {singleBox ? singleBox.borderThickness : Math.round(
+                                        selectedBoxes.reduce((sum, b) => sum + b.borderThickness, 0) / selectedBoxes.length
+                                    )}px
+                                </span>
+                            </label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                value={singleBox ? singleBox.borderThickness : Math.round(
+                                    selectedBoxes.reduce((sum, b) => sum + b.borderThickness, 0) / selectedBoxes.length
+                                )}
+                                onChange={(e) => {
+                                    const borderThickness = parseInt(e.target.value);
+                                    onUpdateSelectedBoxes({ borderThickness });
+                                }}
+                            />
+                        </div>
+
+                        {/* Tag Manager */}
+                        <div className="form-group">
+                            <label>Tags (not shown on canvas)</label>
+                            {allTags.length > 0 && (
+                                <div className="tag-manager">
+                                    {allTags.map(tag => (
+                                        <button
+                                            key={tag}
+                                            className={`tag-button ${commonTags.includes(tag) ? 'active' : ''}`}
+                                            onClick={() => handleToggleTag(tag)}
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="add-tag-input">
+                                <input
+                                    type="text"
+                                    placeholder="Add new tag..."
+                                    value={newTag}
+                                    onChange={(e) => setNewTag(e.target.value)}
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter') {
+                                            handleAddTag();
+                                        }
+                                    }}
+                                />
+                                <button onClick={handleAddTag}>Add</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ContextMenu Component
+        function ContextMenu({ x, y, type, onClose, onDeleteBoxes, onDeleteConnections, onAddConnection, onLayerAction, onQuickEdit, settings }) {
+            const menuRef = useRef(null);
+            const [submenu, setSubmenu] = useState(null);
+
+            useEffect(() => {
+                if (menuRef.current) {
+                    const rect = menuRef.current.getBoundingClientRect();
+                    if (rect.right > window.innerWidth) {
+                        menuRef.current.style.left = `${x - rect.width}px`;
+                    }
+                    if (rect.bottom > window.innerHeight) {
+                        menuRef.current.style.top = `${y - rect.height}px`;
+                    }
+                }
+            }, [x, y]);
+
+            if (type === 'box') {
+                return (
+                    <div ref={menuRef} className="context-menu" style={{ left: x, top: y }}>
+                        <div
+                            className="context-menu-item"
+                            onMouseEnter={() => setSubmenu('connection')}
+                            onMouseLeave={() => setSubmenu(null)}
+                        >
+                            Add Connection →
+                            {submenu === 'connection' && (
+                                <div className="context-menu submenu">
+                                    <div className="context-menu-item" onClick={() => { onAddConnection('solid'); onClose(); }}>
+                                        Solid
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onAddConnection('dashed'); onClose(); }}>
+                                        Dashed
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onAddConnection('dotted'); onClose(); }}>
+                                        Dotted
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onAddConnection('double'); onClose(); }}>
+                                        Double
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="context-menu-separator" />
+                        <div
+                            className="context-menu-item"
+                            onMouseEnter={() => setSubmenu('level')}
+                            onMouseLeave={() => setSubmenu(null)}
+                        >
+                            Quick Level Edit →
+                            {submenu === 'level' && (
+                                <div className="context-menu submenu">
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('level', 1); onClose(); }}>
+                                        Level 1
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('level', 2); onClose(); }}>
+                                        Level 2
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('level', 3); onClose(); }}>
+                                        Level 3
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div
+                            className="context-menu-item"
+                            onMouseEnter={() => setSubmenu('color')}
+                            onMouseLeave={() => setSubmenu(null)}
+                        >
+                            Quick Color Edit →
+                            {submenu === 'color' && (
+                                <div className="context-menu submenu" style={{ padding: '8px' }}>
+                                    <div className="color-grid" style={{ width: '150px' }}>
+                                        {settings.defaultColors.map(color => (
+                                            <div
+                                                key={color}
+                                                className="color-swatch"
+                                                style={{ backgroundColor: color }}
+                                                onClick={() => { onQuickEdit('color', color); onClose(); }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div
+                            className="context-menu-item"
+                            onMouseEnter={() => setSubmenu('border')}
+                            onMouseLeave={() => setSubmenu(null)}
+                        >
+                            Quick Border Edit →
+                            {submenu === 'border' && (
+                                <div className="context-menu submenu">
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('borderThickness', 1); onClose(); }}>
+                                        Thin (1px)
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('borderThickness', 2); onClose(); }}>
+                                        Normal (2px)
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('borderThickness', 4); onClose(); }}>
+                                        Thick (4px)
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="context-menu-separator" />
+                        <div className="context-menu-item" onClick={() => { onLayerAction('front'); onClose(); }}>
+                            Bring to Front
+                        </div>
+                        <div className="context-menu-item" onClick={() => { onLayerAction('back'); onClose(); }}>
+                            Send to Back
+                        </div>
+                        <div className="context-menu-item" onClick={() => { onLayerAction('forward'); onClose(); }}>
+                            Move Forward One Layer
+                        </div>
+                        <div className="context-menu-item" onClick={() => { onLayerAction('backward'); onClose(); }}>
+                            Move Back One Layer
+                        </div>
+                        <div className="context-menu-separator" />
+                        <div className="context-menu-item" onClick={() => { onDeleteBoxes(); onClose(); }}>
+                            Delete
+                        </div>
+                    </div>
+                );
+            }
+
+            if (type === 'connection') {
+                return (
+                    <div ref={menuRef} className="context-menu" style={{ left: x, top: y }}>
+                        <div
+                            className="context-menu-item"
+                            onMouseEnter={() => setSubmenu('style')}
+                            onMouseLeave={() => setSubmenu(null)}
+                        >
+                            Edit Style →
+                            {submenu === 'style' && (
+                                <div className="context-menu submenu">
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('style', 'solid'); onClose(); }}>
+                                        Solid
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('style', 'dashed'); onClose(); }}>
+                                        Dashed
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('style', 'dotted'); onClose(); }}>
+                                        Dotted
+                                    </div>
+                                    <div className="context-menu-item" onClick={() => { onQuickEdit('style', 'double'); onClose(); }}>
+                                        Double
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div
+                            className="context-menu-item"
+                            onMouseEnter={() => setSubmenu('connColor')}
+                            onMouseLeave={() => setSubmenu(null)}
+                        >
+                            Edit Color →
+                            {submenu === 'connColor' && (
+                                <div className="context-menu submenu" style={{ padding: '8px' }}>
+                                    <div className="color-grid" style={{ width: '150px' }}>
+                                        {settings.defaultColors.map(color => (
+                                            <div
+                                                key={color}
+                                                className="color-swatch"
+                                                style={{ backgroundColor: color }}
+                                                onClick={() => { onQuickEdit('color', color); onClose(); }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="context-menu-separator" />
+                        <div className="context-menu-item" onClick={() => { onDeleteConnections(); onClose(); }}>
+                            Delete Connection
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div ref={menuRef} className="context-menu" style={{ left: x, top: y }}>
+                    <div className="context-menu-item" onClick={onClose}>
+                        Add New Box
+                    </div>
+                </div>
+            );
+        }
+
+        // SettingsModal Component
+        function SettingsModal({ settings, onSave, onClose }) {
+            const [localSettings, setLocalSettings] = useState({ ...settings });
+
+            return (
+                <div className="modal-overlay" onClick={onClose}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>Settings</h2>
+                        </div>
+                        <div className="modal-content">
+                            <div className="form-group">
+                                <label>Default Border Thickness</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="10"
+                                    value={localSettings.defaultBorderThickness}
+                                    onChange={(e) => {
+                                        setLocalSettings({
+                                            ...localSettings,
+                                            defaultBorderThickness: parseInt(e.target.value) || 2
+                                        });
+                                    }}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Level Collapse Thresholds (%)</label>
+                                {Object.keys(localSettings.levelThresholds).map(level => (
+                                    <div key={level} style={{ marginBottom: '8px' }}>
+                                        <label style={{ fontSize: '12px' }}>Level {level}:</label>
+                                        <input
+                                            type="number"
+                                            value={localSettings.levelThresholds[level]}
+                                            onChange={(e) => {
+                                                setLocalSettings({
+                                                    ...localSettings,
+                                                    levelThresholds: {
+                                                        ...localSettings.levelThresholds,
+                                                        [level]: parseInt(e.target.value) || 0
+                                                    }
+                                                });
+                                            }}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button onClick={onClose}>Cancel</button>
+                            <button className="primary" onClick={() => onSave(localSettings)}>Save</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
